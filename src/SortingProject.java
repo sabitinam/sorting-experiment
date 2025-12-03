@@ -71,5 +71,9 @@ public class SortingProject {
         int[] sample = ArrGen.randomArray(10, 100);
         System.out.println("Sample: " + Arrays.toString(sample));
         System.out.println("Sorted? " + ArrGen.isSorted(sample));
+
+
+
+
     }
 }
