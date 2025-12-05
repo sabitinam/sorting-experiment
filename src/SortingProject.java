@@ -72,6 +72,32 @@ public class SortingProject {
         System.out.println("Sample: " + Arrays.toString(sample));
         System.out.println("Sorted? " + ArrGen.isSorted(sample));
 
+    //Instrumentation counters
+    class Metrics {
+        long comparisons = 0;
+        long moves = 0;
+
+        int cmp(int x, int y) {
+            comparisons++;
+            return Integer.compare(x, y);
+        }
+
+        void swap(int[] a, int i, int j) {
+            if (i == j) return;
+            int t = a[i]; a[i] = a[j]; a[j] = t;
+            moves += 3; // three writes
+        }
+
+        void moveSet(int[] a, int idx, int val) {
+            a[idx] = val;
+            moves++;
+        }
+
+        void add(Metrics other) {
+            this.comparisons += other.comparisons;
+            this.moves += other.moves;
+        }
+    }
 
 
 
