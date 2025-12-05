@@ -99,6 +99,50 @@ public class SortingProject {
         }
     }
 
+    //insertion sort (for small partitions)
+    class SmallSort {
+         static void insertion(int[] a, int lo, int hi, Metrics m) {
+             for (int i = lo + 1; i <= hi; i++) {
+                 int key = a[i]; m.moves++;
+                 int j = i - 1;
+                 while (j >= lo && m.cmp(a[j], key) > 0) {
+                     m.moveSet(a, j + 1, a[j]);
+                     j--;
+                 }
+                 m.moveSet(a, j + 1, key);
+             }
+         }
+    }
+
+
+
+    //Heapsort
+    class HeapSort {
+        static void sort(int[] a, Metrics m) {
+            int n = a.length;
+            // build max-heap
+            for (int i = (n/2) - 1; i >= 0; i--) siftDown(a, n, i, m);
+            // extract
+            for (int end = n - 1; end > 0; end--) {
+                m.swap(a, 0, end);
+                siftDown(a, end, 0, m);
+            }
+        }
+
+        private static void siftDown(int[] a, int n, int i, Metrics m) {
+            while (true) {
+                int left = 2*i + 1, right = 2*i + 2, largest = i;
+                if (left < n && m.cmp(a[left], a[largest]) > 0) largest = left;
+                if (right < n && m.cmp(a[right], a[largest]) > 0) largest = right;
+                if (largest == i) break;
+                m.swap(a, i, largest);
+                i = largest;
+            }
+        }
+    }
+
+
+    
 
 
     }
