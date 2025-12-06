@@ -7,6 +7,53 @@ import java.util.*;
 
 public class Sorting {
 
+    public static void main(String[] args) throws Exception {
+        // Smoke validations
+        int[] test = ArrGen.randomArray(1000, 10000);
+        for (String algo : new String[]{"HEAP", "MERGE", "QUICK", "TREE", "INTRO"}) {
+            int[] copy = ArrGen.copy(test);
+            Metrics m = new Metrics();
+            switch (algo) {
+                case "HEAP":
+                    HeapSort.sort(copy, m);
+                    break;
+                case "MERGE":
+                    MergeSort.sort(copy, m);
+                    break;
+                case "QUICK":
+                    QuickSort.sort(copy, m);
+                    break;
+                case "TREE":
+                    copy = TreeSort.sort(copy, m);
+                    break;
+                case "INTRO":
+                    IntroSort.sort(copy, m);
+                    break;
+            }
+            if (!ArrGen.isSorted(copy)) throw new RuntimeException(algo + " failed sort validation.");
+        }
+        System.out.println("All algorithms passed smoke test.");
+
+        // Experiments
+        int[] sizes = {1_000, 5_000, 10_000};
+        DatasetType[] types = {DatasetType.RANDOM, DatasetType.NEARLY_SORTED, DatasetType.REVERSED, DatasetType.MANY_DUPES};
+        List<RunResult> results = Batch.runAll(sizes, 3, types); // 3 trials per size
+        Table.print(results);
+        CSV.write("sorting_results.csv", results);
+        System.out.println("Wrote sorting_results.csv");
+
+        // Visualizations for the paper
+        System.out.println("\n=== Visualizations on [8,6,7,5,3,0,9] ===");
+        Viz.vizHeap();
+        VizMerge.viz();
+        VizQuick.viz();
+        VizTree.viz();
+        VizIntro.viz();
+
+        System.out.println("\nDone.");
+    }
+
+
     //Helper class for generating and checking arrays
     static class ArrGen {
         private static final Random rng = new Random(212); // fixed seed
@@ -93,16 +140,6 @@ public class Sorting {
     }
 
 
-
-    //main sorting methods and experimentation
-    public static void main(String[] args) {
-        int[] sample = ArrGen.randomArray(10, 100);
-        System.out.println("Sample: " + Arrays.toString(sample));
-        System.out.println("Sorted? " + ArrGen.isSorted(sample));
-    }
-
-
-
     //Instrumentation counters
     static class Metrics {
         long comparisons = 0;
@@ -115,7 +152,9 @@ public class Sorting {
 
         void swap(int[] a, int i, int j) {
             if (i == j) return;
-            int t = a[i]; a[i] = a[j]; a[j] = t;
+            int t = a[i];
+            a[i] = a[j];
+            a[j] = t;
             moves += 3; // three writes
         }
 
@@ -131,22 +170,21 @@ public class Sorting {
     }
 
 
-
     //small insertion sort (for small partitions)
     class SmallSort {
-         static void insertion(int[] a, int lo, int hi, Metrics m) {
-             for (int i = lo + 1; i <= hi; i++) {
-                 int key = a[i]; m.moves++;
-                 int j = i - 1;
-                 while (j >= lo && m.cmp(a[j], key) > 0) {
-                     m.moveSet(a, j + 1, a[j]);
-                     j--;
-                 }
-                 m.moveSet(a, j + 1, key);
-             }
-         }
+        static void insertion(int[] a, int lo, int hi, Metrics m) {
+            for (int i = lo + 1; i <= hi; i++) {
+                int key = a[i];
+                m.moves++;
+                int j = i - 1;
+                while (j >= lo && m.cmp(a[j], key) > 0) {
+                    m.moveSet(a, j + 1, a[j]);
+                    j--;
+                }
+                m.moveSet(a, j + 1, key);
+            }
+        }
     }
-
 
 
     //Heapsort
@@ -154,7 +192,7 @@ public class Sorting {
         static void sort(int[] a, Metrics m) {
             int n = a.length;
             // build max-heap
-            for (int i = (n/2) - 1; i >= 0; i--) siftDown(a, n, i, m);
+            for (int i = (n / 2) - 1; i >= 0; i--) siftDown(a, n, i, m);
             // extract
             for (int end = n - 1; end > 0; end--) {
                 m.swap(a, 0, end);
@@ -164,7 +202,7 @@ public class Sorting {
 
         private static void siftDown(int[] a, int n, int i, Metrics m) {
             while (true) {
-                int left = 2*i + 1, right = 2*i + 2, largest = i;
+                int left = 2 * i + 1, right = 2 * i + 2, largest = i;
                 if (left < n && m.cmp(a[left], a[largest]) > 0) largest = left;
                 if (right < n && m.cmp(a[right], a[largest]) > 0) largest = right;
                 if (largest == i) break;
@@ -173,7 +211,6 @@ public class Sorting {
             }
         }
     }
-
 
 
     //Mergesort
@@ -185,7 +222,7 @@ public class Sorting {
 
         private static void sortRec(int[] a, int lo, int hi, int[] tmp, Metrics m) {
             if (lo >= hi) return;
-            int mid = lo + (hi - lo)/2;
+            int mid = lo + (hi - lo) / 2;
             sortRec(a, lo, mid, tmp, m);
             sortRec(a, mid + 1, hi, tmp, m);
             merge(a, lo, mid, hi, tmp, m);
@@ -194,16 +231,29 @@ public class Sorting {
         private static void merge(int[] a, int lo, int mid, int hi, int[] tmp, Metrics m) {
             int i = lo, j = mid + 1, k = lo;
             while (i <= mid && j <= hi) {
-                if (m.cmp(a[i], a[j]) <= 0) { tmp[k++] = a[i++]; m.moves++; }
-                else { tmp[k++] = a[j++]; m.moves++; }
+                if (m.cmp(a[i], a[j]) <= 0) {
+                    tmp[k++] = a[i++];
+                    m.moves++;
+                } else {
+                    tmp[k++] = a[j++];
+                    m.moves++;
+                }
             }
 
-            while (i <= mid) { tmp[k++] = a[i++]; m.moves++; }
-            while (j <= hi) { tmp[k++] = a[j++]; m.moves++; }
-            for (k = lo; k <= hi; k++) { a[k] = tmp[k]; m.moves++; }
+            while (i <= mid) {
+                tmp[k++] = a[i++];
+                m.moves++;
+            }
+            while (j <= hi) {
+                tmp[k++] = a[j++];
+                m.moves++;
+            }
+            for (k = lo; k <= hi; k++) {
+                a[k] = tmp[k];
+                m.moves++;
+            }
         }
     }
-
 
 
     //Quicksort (Hoare partition + insertion cutoff)
@@ -231,17 +281,20 @@ public class Sorting {
         }
 
         private static int partitionHoare(int[] a, int lo, int hi, Metrics m) {
-            int pivot = a[lo + (hi - lo)/2]; // median-of-middle
+            int pivot = a[lo + (hi - lo) / 2]; // median-of-middle
             int i = lo - 1, j = hi + 1;
             while (true) {
-                do { i++; } while (m.cmp(a[i], pivot) < 0);
-                do { j--; } while (m.cmp(a[j], pivot) > 0);
+                do {
+                    i++;
+                } while (m.cmp(a[i], pivot) < 0);
+                do {
+                    j--;
+                } while (m.cmp(a[j], pivot) > 0);
                 if (i >= j) return j;
                 m.swap(a, i, j);
             }
         }
     }
-
 
 
     //Tree sort via TreeMap (supports duplicates)
@@ -254,15 +307,17 @@ public class Sorting {
             }
             int[] out = new int[a.length];
             int idx = 0;
-            for (Map.Entry<Integer,Integer> e : map.entrySet()) {
+            for (Map.Entry<Integer, Integer> e : map.entrySet()) {
                 int v = e.getKey(), c = e.getValue();
-                for (int i = 0; i < c; i++) { out[idx++] = v; m.moves++; }
+                for (int i = 0; i < c; i++) {
+                    out[idx++] = v;
+                    m.moves++;
+                }
             }
 
             return out;
         }
     }
-
 
 
     //Intro sort (quick + depth limit -> heapsort)
@@ -297,7 +352,7 @@ public class Sorting {
 
         private static void heapRange(int[] a, int lo, int hi, Metrics m) {
             int n = hi - lo + 1;
-            for (int i = (n/2) - 1; i >= 0; i--) siftDown(a, lo, n, i, m);
+            for (int i = (n / 2) - 1; i >= 0; i--) siftDown(a, lo, n, i, m);
             for (int end = n - 1; end > 0; end--) {
                 m.swap(a, lo, lo + end);
                 siftDown(a, lo, end, 0, m);
@@ -306,7 +361,7 @@ public class Sorting {
 
         private static void siftDown(int[] a, int base, int n, int i, Metrics m) {
             while (true) {
-                int left = 2*i + 1, right = 2*i + 2, largest = i;
+                int left = 2 * i + 1, right = 2 * i + 2, largest = i;
                 if (left < n && m.cmp(a[base + left], a[base + largest]) > 0) largest = left;
                 if (right < n && m.cmp(a[base + right], a[base + largest]) > 0) largest = right;
                 if (largest == i) break;
@@ -319,11 +374,15 @@ public class Sorting {
     // small helper to reuse Hoare partition without cutoff from QuickSort
     class QuickSortPartition {
         static int partitionHoare(int[] a, int lo, int hi, Metrics m) {
-            int pivot = a[lo + (hi - lo)/2];
+            int pivot = a[lo + (hi - lo) / 2];
             int i = lo - 1, j = hi + 1;
             while (true) {
-                do { i++; } while (m.cmp(a[i], pivot) < 0);
-                do { j--; } while (m.cmp(a[j], pivot) > 0);
+                do {
+                    i++;
+                } while (m.cmp(a[i], pivot) < 0);
+                do {
+                    j--;
+                } while (m.cmp(a[j], pivot) > 0);
                 if (i >= j) return j;
                 m.swap(a, i, j);
             }
@@ -331,7 +390,7 @@ public class Sorting {
     }
 
     //Experiment configurations
-    enum DatasetType { RANDOM, NEARLY_SORTED, REVERSED, MANY_DUPES }
+    enum DatasetType {RANDOM, NEARLY_SORTED, REVERSED, MANY_DUPES}
 
     class DatasetFactory {
         static int[] make(DatasetType type, int n) {
@@ -355,7 +414,6 @@ public class Sorting {
     }
 
 
-
     //per-run wrapper
     static class RunResult {
         String algo;
@@ -367,8 +425,13 @@ public class Sorting {
         boolean sorted;
 
         RunResult(String algo, DatasetType dataset, int n, long millis, long comparisons, long moves, boolean sorted) {
-            this.algo = algo; this.dataset = dataset; this.n = n;
-            this.millis = millis; this.comparisons = comparisons; this.moves = moves; this.sorted = sorted;
+            this.algo = algo;
+            this.dataset = dataset;
+            this.n = n;
+            this.millis = millis;
+            this.comparisons = comparisons;
+            this.moves = moves;
+            this.sorted = sorted;
         }
     }
 
@@ -378,19 +441,29 @@ public class Sorting {
             Metrics m = new Metrics();
             long t0 = System.currentTimeMillis();
             switch (algo) {
-                case "HEAP":     HeapSort.sort(a, m); break;
-                case "MERGE":    MergeSort.sort(a, m); break;
-                case "QUICK":    QuickSort.sort(a, m); break;
-                case "TREE":     a = TreeSort.sort(a, m); break;
-                case "INTRO":    IntroSort.sort(a, m); break;
-                default: throw new IllegalArgumentException("Unknown algo: " + algo);
+                case "HEAP":
+                    HeapSort.sort(a, m);
+                    break;
+                case "MERGE":
+                    MergeSort.sort(a, m);
+                    break;
+                case "QUICK":
+                    QuickSort.sort(a, m);
+                    break;
+                case "TREE":
+                    a = TreeSort.sort(a, m);
+                    break;
+                case "INTRO":
+                    IntroSort.sort(a, m);
+                    break;
+                default:
+                    throw new IllegalArgumentException("Unknown algo: " + algo);
             }
             long t1 = System.currentTimeMillis();
             boolean ok = ArrGen.isSorted(a);
             return new RunResult(algo, ds, a.length, (t1 - t0), m.comparisons, m.moves, ok);
         }
     }
-
 
 
     //batch runner across sizes, trials, datasets
@@ -414,7 +487,6 @@ public class Sorting {
     }
 
 
-
     //console table printer
     class Table {
         static void print(List<RunResult> results) {
@@ -426,7 +498,6 @@ public class Sorting {
             }
         }
     }
-
 
 
     //CSV writer
@@ -443,10 +514,11 @@ public class Sorting {
     }
 
 
-
     //visualization – Heapsort on [8,6,7,5,3,0,9]
     class Viz {
-        static int[] base() { return new int[]{8,6,7,5,3,0,9}; }
+        static int[] base() {
+            return new int[]{8, 6, 7, 5, 3, 0, 9};
+        }
 
         static void vizHeap() {
             int[] a = base();
@@ -464,12 +536,12 @@ public class Sorting {
             stepHeap(a, 0);
             System.out.println("Max-heap built (conceptual).");
         }
+
         private static void stepHeap(int[] a, int i) {
             // This is a didactic print, not a full simulator. We just announce the operation.
             System.out.println("siftDown at i=" + i + " -> (heap shape updated)");
         }
     }
-
 
 
     //visualization – Mergesort
@@ -516,24 +588,5 @@ public class Sorting {
             System.out.println("On [8,6,7,5,3,0,9], behaves like quicksort with small insertion cutoffs.");
         }
     }
-
-    
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 }
