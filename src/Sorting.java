@@ -1,7 +1,9 @@
-import java.util.Map;
-import java.util.Random;
-import java.util.Arrays;
-import java.util.TreeMap;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.OutputStreamWriter;
+import java.io.PrintWriter;
+import java.nio.charset.StandardCharsets;
+import java.util.*;
 
 public class Sorting {
 
@@ -66,6 +68,28 @@ public class Sorting {
             }
             return true;
         }
+
+        static int[] nearlySorted(int n, int bound, int swaps) {
+            int[] a = new int[n];
+
+            // Fill with numbers 0..n-1 (fully sorted baseline)
+            for (int i = 0; i < n; i++) {
+                a[i] = i;
+            }
+
+            // Perform a small number of random swaps to make it "nearly sorted"
+            Random rng = ArrGen.rng;
+            for (int s = 0; s < swaps; s++) {
+                int i = rng.nextInt(n);
+                int j = rng.nextInt(n);
+                int tmp = a[i];
+                a[i] = a[j];
+                a[j] = tmp;
+            }
+
+            return a;
+        }
+
     }
 
 
@@ -80,7 +104,7 @@ public class Sorting {
 
 
     //Instrumentation counters
-    class Metrics {
+    static class Metrics {
         long comparisons = 0;
         long moves = 0;
 
@@ -108,7 +132,7 @@ public class Sorting {
 
 
 
-    //insertion sort (for small partitions)
+    //small insertion sort (for small partitions)
     class SmallSort {
          static void insertion(int[] a, int lo, int hi, Metrics m) {
              for (int i = lo + 1; i <= hi; i++) {
@@ -306,17 +330,210 @@ public class Sorting {
         }
     }
 
+    //Experiment configurations
+    enum DatasetType { RANDOM, NEARLY_SORTED, REVERSED, MANY_DUPES }
 
+    class DatasetFactory {
+        static int[] make(DatasetType type, int n) {
+            switch (type) {
+                case RANDOM:
+                    return ArrGen.randomArray(n, n * 5);
 
+                case NEARLY_SORTED:
+                    return ArrGen.nearlySorted(n, n * 5, Math.max(1, n / 50));
 
+                case REVERSED:
+                    return ArrGen.reversed(n);
 
+                case MANY_DUPES:
+                    return ArrGen.manyDuplicates(n, Math.max(3, n / 50));
 
-
-
-
-
-
-
-
-
+                default:
+                    throw new IllegalArgumentException();
+            }
+        }
     }
+
+
+
+    //per-run wrapper
+    static class RunResult {
+        String algo;
+        DatasetType dataset;
+        int n;
+        long millis;
+        long comparisons;
+        long moves;
+        boolean sorted;
+
+        RunResult(String algo, DatasetType dataset, int n, long millis, long comparisons, long moves, boolean sorted) {
+            this.algo = algo; this.dataset = dataset; this.n = n;
+            this.millis = millis; this.comparisons = comparisons; this.moves = moves; this.sorted = sorted;
+        }
+    }
+
+    class Runner {
+        static RunResult runAlgo(String algo, int[] base, DatasetType ds) {
+            int[] a = ArrGen.copy(base);
+            Metrics m = new Metrics();
+            long t0 = System.currentTimeMillis();
+            switch (algo) {
+                case "HEAP":     HeapSort.sort(a, m); break;
+                case "MERGE":    MergeSort.sort(a, m); break;
+                case "QUICK":    QuickSort.sort(a, m); break;
+                case "TREE":     a = TreeSort.sort(a, m); break;
+                case "INTRO":    IntroSort.sort(a, m); break;
+                default: throw new IllegalArgumentException("Unknown algo: " + algo);
+            }
+            long t1 = System.currentTimeMillis();
+            boolean ok = ArrGen.isSorted(a);
+            return new RunResult(algo, ds, a.length, (t1 - t0), m.comparisons, m.moves, ok);
+        }
+    }
+
+
+
+    //batch runner across sizes, trials, datasets
+    class Batch {
+        static final String[] ALGOS = {"HEAP", "MERGE", "QUICK", "TREE", "INTRO"};
+
+        static List<RunResult> runAll(int[] sizes, int trialsPerSize, DatasetType[] types) {
+            List<RunResult> out = new ArrayList<>();
+            for (DatasetType ds : types) {
+                for (int n : sizes) {
+                    for (int trial = 0; trial < trialsPerSize; trial++) {
+                        int[] base = DatasetFactory.make(ds, n);
+                        for (String algo : ALGOS) {
+                            out.add(Runner.runAlgo(algo, base, ds));
+                        }
+                    }
+                }
+            }
+            return out;
+        }
+    }
+
+
+
+    //console table printer
+    class Table {
+        static void print(List<RunResult> results) {
+            System.out.printf("%-7s %-14s %8s %8s %14s %14s %8s%n",
+                    "Algo", "Dataset", "N", "ms", "comparisons", "moves", "sorted");
+            for (RunResult r : results) {
+                System.out.printf("%-7s %-14s %8d %8d %14d %14d %8s%n",
+                        r.algo, r.dataset, r.n, r.millis, r.comparisons, r.moves, r.sorted);
+            }
+        }
+    }
+
+
+
+    //CSV writer
+    class CSV {
+        static void write(String path, List<RunResult> results) throws IOException {
+            try (PrintWriter pw = new PrintWriter(new OutputStreamWriter(new FileOutputStream(path), StandardCharsets.UTF_8))) {
+                pw.println("algo,dataset,n,millis,comparisons,moves,sorted");
+                for (RunResult r : results) {
+                    pw.printf("%s,%s,%d,%d,%d,%d,%s%n",
+                            r.algo, r.dataset, r.n, r.millis, r.comparisons, r.moves, r.sorted);
+                }
+            }
+        }
+    }
+
+
+
+    //visualization – Heapsort on [8,6,7,5,3,0,9]
+    class Viz {
+        static int[] base() { return new int[]{8,6,7,5,3,0,9}; }
+
+        static void vizHeap() {
+            int[] a = base();
+            System.out.println("HEAP: build max-heap from [8,6,7,5,3,0,9]");
+            // Show the array-level heap building steps
+            // For brevity, we show the states after each siftDown starting from last parent
+            System.out.println("Initial: " + Arrays.toString(a));
+            // Manually emulate key steps:
+            // parent indices: (n/2)-1 = 2,1,0
+            // After siftDown i=2
+            stepHeap(a, 2);
+            // After siftDown i=1
+            stepHeap(a, 1);
+            // After siftDown i=0
+            stepHeap(a, 0);
+            System.out.println("Max-heap built (conceptual).");
+        }
+        private static void stepHeap(int[] a, int i) {
+            // This is a didactic print, not a full simulator. We just announce the operation.
+            System.out.println("siftDown at i=" + i + " -> (heap shape updated)");
+        }
+    }
+
+
+
+    //visualization – Mergesort
+    class VizMerge {
+        static void viz() {
+            int[] a = Viz.base();
+            System.out.println("MERGE: split recursively then merge:");
+            System.out.println("Start: " + Arrays.toString(a));
+            System.out.println("Split -> [8,6,7] | [5,3,0,9]");
+            System.out.println("Split -> [8] [6,7] | [5,3] [0,9]");
+            System.out.println("Merge [6,7] -> [6,7]; Merge [5,3] -> [3,5]; Merge [0,9] -> [0,9]");
+            System.out.println("Merge [8] & [6,7] -> [6,7,8]");
+            System.out.println("Merge [3,5] & [0,9] -> [0,3,5,9]");
+            System.out.println("Final merge [6,7,8] & [0,3,5,9] -> [0,3,5,6,7,8,9]");
+        }
+    }
+
+
+    //visualization – Quicksort (Hoare)
+    class VizQuick {
+        static void viz() {
+            System.out.println("QUICK: Hoare partition on [8,6,7,5,3,0,9]");
+            System.out.println("Pivot = middle element (index 3) -> 5");
+            System.out.println("Partition step: swap elements to put <5 on left, >5 on right");
+            System.out.println("Subarrays recurse: [<=5] and [>=5], then insertion on tiny parts");
+            System.out.println("Conceptual result: [0,3,5,6,7,8,9]");
+        }
+    }
+
+    //visualization – Tree sort
+    class VizTree {
+        static void viz() {
+            System.out.println("TREE: insert into ordered map (with counts), then emit in order:");
+            System.out.println("Insert order: 8,6,7,5,3,0,9");
+            System.out.println("In-order traversal yields: [0,3,5,6,7,8,9]");
+        }
+    }
+
+
+    //visualization – Intro sort
+    class VizIntro {
+        static void viz() {
+            System.out.println("INTRO: starts like Quicksort; if recursion too deep, fallback to Heapsort.");
+            System.out.println("On [8,6,7,5,3,0,9], behaves like quicksort with small insertion cutoffs.");
+        }
+    }
+
+    
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+}
